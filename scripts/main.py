@@ -5,6 +5,7 @@ from scripts.dataloader import BrainTumorDataLoader
 import os
 import random
 from pathlib import Path
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 main_path = "../"
 main_train_path= os.path.join(main_path, 'data/Train')
@@ -36,19 +37,24 @@ for cls_name in os.listdir(main_train_path):
     img_path = os.path.join(images_dir, img_file)
     mask_path = os.path.join(masks_dir, img_file)
     segmenter.create_overlay(img_path, mask_path, alpha=0.3)
-    
+
+# ------------------------------
+# Class to idx: (same to train and test)
+class_names = sorted([d for d in os.listdir(main_train_path) if os.path.isdir(os.path.join(main_train_path, d))])
+class_to_idx = {cls_name: idx for idx, cls_name in enumerate(class_names)}
+
 # ------------------------------
 ## 2. Pre process the data
-traindataset = BrainTumorDataset(train_dir=main_train_path,image_size=(256, 256),augment=False)
+traindataset = BrainTumorDataset(main_train_path, class_to_idx, image_size=(256, 256),augment=False)
 for i in range (0,5):
     traindataset.visualize_sample()
 
 # ------------------------------
 ## 3. Dataloader
-loader_builder = BrainTumorDataLoader(traindataset, batch_size=8, weighted_sampling=True)
+loader_builder = BrainTumorDataLoader(traindataset, class_to_idx, batch_size=8, weighted_sampling=True)
 train_loader = loader_builder.get_loader()
     
-    
+  
     
     
     

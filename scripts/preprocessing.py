@@ -16,11 +16,12 @@ class BrainTumorDataset(Dataset):
     - fixed-size resize
     """
 
-    def __init__(self, train_dir, mask_dir_name="brain_masks", image_size=(256, 256), augment=True):
+    def __init__(self, train_dir, class_to_idx, mask_dir_name="brain_masks", image_size=(256, 256), augment=True):
         self.samples = []
         self.image_size = image_size
         self.augment = augment
-
+    
+        
         for cls_name in os.listdir(train_dir):
             cls_dir = os.path.join(train_dir, cls_name)
             if not os.path.isdir(cls_dir):
@@ -42,7 +43,7 @@ class BrainTumorDataset(Dataset):
                 mask_path = os.path.join(masks_dir, img_file)
 
                 if os.path.exists(label_path) and os.path.exists(mask_path):
-                    self.samples.append((img_path, label_path, mask_path))
+                    self.samples.append((img_path, label_path, mask_path, class_to_idx[cls_name]))
 
     def __len__(self):
         return len(self.samples)
@@ -78,7 +79,7 @@ class BrainTumorDataset(Dataset):
         return boxes
 
     def __getitem__(self, idx):
-        img_path, label_path, mask_path = self.samples[idx]
+        img_path, label_path, mask_path, _ = self.samples[idx]
 
         # Load image and mask
         img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
