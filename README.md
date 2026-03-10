@@ -22,23 +22,22 @@ https://www.kaggle.com/datasets/ahmedsorour1/mri-for-brain-tumor-with-bounding-b
 - Labels format: `<class_id> <x_center> <y_center> <width> <height>` (normalized).  
 ---
 ## Project Structure
+```
 Brain Tumor MRI/
-│
 ├── data/
-│   ├── TRAIN/
-│   │   ├── images/       # MRI scans in JPG format
-│   │   ├── labels/       # Annotation files describing tumor bounding boxes
-│   │   └── brain_masks/  # Masks generated during preprocessing in this project
-│   │
-│   └── TEST/
-│       ├── images/
-│       ├── labels/
-│       └── brain_masks/
-│
+│ ├── TRAIN/
+│ │ ├── images/ # MRI scans in JPG format
+│ │ ├── labels/ # Annotation files describing tumor bounding boxes
+│ │ └── brain_masks/ # Masks generated during preprocessing in this project
+│ └── TEST/
+│ ├── images/
+│ ├── labels/
+│ └── brain_masks/
 ├── scripts/
-│   ├── dataloader.py       # Custom PyTorch DataLoader with weighted sampling
-│   ├── detection.py        # Model definition and training loop
-│   ├── EDA.py              # Exploratory Data Analysis tools
-│   ├── preprocessing.py    # Preprocessing functions (crop, resize, augmentation)
-│   ├── segmentation.py     # Brain extraction / mask generation
-│   └── main.py             # Entry point for training/evaluation
+│ ├── dataloader.py # Custom PyTorch DataLoader with weighted sampling
+│ ├── detection.py # Model definition and training loop
+│ ├── EDA.py # Exploratory Data Analysis tools
+│ ├── preprocessing.py # Preprocessing functions (crop, resize, augmentation)
+│ ├── segmentation.py # Brain extraction / mask generation
+│ └── main.py # Entry point for training/evaluation
+`
