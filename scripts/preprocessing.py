@@ -14,6 +14,7 @@ class BrainTumorDataset(Dataset):
     - brain mask based cropping
     - correct bounding box adaptation
     - fixed-size resize
+    - augmentation
     """
 
     def __init__(self, train_dir, class_to_idx, mask_dir_name="brain_masks", image_size=(256, 256), augment=True):
@@ -121,28 +122,67 @@ class BrainTumorDataset(Dataset):
         boxes[:, 1::2] = boxes[:, 1::2].clamp(0, h_crop)
 
         # Resize image
-        """
         img = cv2.resize(img, self.image_size)
         scale_x = self.image_size[1] / w_crop
         scale_y = self.image_size[0] / h_crop
-
         boxes[:, [0, 2]] *= scale_x
         boxes[:, [1, 3]] *= scale_y
-        """
+        
         
         # Data augmentation
-        if self.augment and random.random() < 0.5:
-            img = cv2.flip(img, 1)
-            boxes[:, [0, 2]] = self.image_size[1] - boxes[:, [2, 0]]
-
+        if self.augment:
+            h, w = img.shape
+            # Horizontal flip 
+            if random.random() < 0.5:
+                img = cv2.flip(img, 1)
+                boxes[:, [0, 2]] = w - boxes[:, [2, 0]]
+                
+            # Rotation + Zoom 
+            if random.random() < 0.4:
+                angle = random.uniform(-10, 10)
+                scale = random.uniform(0.9, 1.1)
+                M = cv2.getRotationMatrix2D((w/2, h/2), angle, scale)
+                img = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REFLECT)
+                # transform bounding boxes
+                new_boxes = []
+                for box in boxes:
+                    xmin, ymin, xmax, ymax = box.tolist()
+                    corners = np.array([ [xmin, ymin], [xmax, ymin], [xmax, ymax], [xmin, ymax] ])
+                    ones = np.ones((4,1))
+                    corners_h = np.hstack([corners, ones])
+                    transformed = M.dot(corners_h.T).T
+                    x_coords = transformed[:,0]
+                    y_coords = transformed[:,1]
+                    new_xmin = np.min(x_coords)
+                    new_ymin = np.min(y_coords)
+                    new_xmax = np.max(x_coords)
+                    new_ymax = np.max(y_coords)
+                    new_boxes.append([new_xmin, new_ymin, new_xmax, new_ymax])
+                boxes = torch.tensor(new_boxes, dtype=torch.float32)
+                # clip to image
+                boxes[:, 0::2] = boxes[:, 0::2].clamp(0, w)
+                boxes[:, 1::2] = boxes[:, 1::2].clamp(0, h)
+        
+            # Brightness / Contrast
+            if random.random() < 0.3:
+                alpha = random.uniform(0.9, 1.1)
+                beta = random.uniform(-15, 15)
+                img = cv2.convertScaleAbs(img, alpha=alpha, beta=beta)
+        
+            # Gaussian noise 
+            if random.random() < 0.2:
+                noise = np.random.normal(0, 5, img.shape)
+                img = img.astype(np.float32) + noise
+                img = np.clip(img, 0, 255).astype(np.uint8)
+        
+            # Gaussian blur 
+            if random.random() < 0.2:
+                img = cv2.GaussianBlur(img, (3,3), 0)
+        
+        
         # Convert to tensor
         img_tensor = TF.to_tensor(img)
-
-        target = {
-            "boxes": boxes,
-            "labels": labels
-        }
-
+        target = {"boxes": boxes, "labels": labels}
         return img_tensor, target
 
     def visualize_sample(self, idx=None):
