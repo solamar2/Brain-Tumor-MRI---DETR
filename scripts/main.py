@@ -38,6 +38,7 @@ for cls_name in os.listdir(main_train_path):
     mask_path = os.path.join(masks_dir, img_file)
     segmenter.create_overlay(img_path, mask_path, alpha=0.3)
 
+
 # ------------------------------
 # Class to idx: (same to train and test)
 class_names = sorted([d for d in os.listdir(main_train_path) if os.path.isdir(os.path.join(main_train_path, d))])
@@ -62,8 +63,11 @@ trainer.train(train_loader, print_every=1)
 
 # ------------------------------
 # 5. Test:
+
 segmenter = BrainMaskSimple(train_dir=main_test_path)
 segmenter.run()
+
+
 test_dataset  = BrainTumorDataset(main_test_path,  class_to_idx, image_size=(256, 256), augment=False)
 test_loader  = BrainTumorDataLoader(test_dataset,  class_to_idx, batch_size=4, weighted_sampling=False, shuffle=False).get_loader()
 
@@ -75,8 +79,7 @@ for imgs, targets in test_loader:
 
 DETRTrainer.visualize_prediction(train_dataset, trainer, idx=5, dataset_type="Train")
 DETRTrainer.visualize_prediction(test_dataset, trainer, idx=2, dataset_type="Test")
-    
-    
+
     
     
     
