@@ -10,7 +10,7 @@ class BrainTumorDataLoader:
     - Custom collate function for detection models
     """
 
-    def __init__(self, dataset, class_to_idx, batch_size=8, num_workers=0, weighted_sampling=True, shuffle=False ):
+    def __init__(self, dataset, class_to_idx, batch_size=8, num_workers=0, weighted_sampling=False, shuffle=False):
         self.dataset = dataset
         self.batch_size = batch_size
         self.num_workers = num_workers
