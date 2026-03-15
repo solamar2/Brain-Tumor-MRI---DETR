@@ -18,19 +18,36 @@ class DETRTrainer:
 
         # Load pretrained DETR
         self.model = torch.hub.load('facebookresearch/detr', 'detr_resnet50', pretrained=True)
+        
+        # Change number of object queries to 1
+        num_queries = 1
+        hidden_dim = self.model.query_embed.weight.shape[1]
+        self.model.query_embed = nn.Embedding(num_queries, hidden_dim)
+
+        # Replace classifier 
         in_features = self.model.class_embed.in_features
-        self.model.class_embed = nn.Linear(in_features, num_classes + 1)  # +1 for no-object class
+        self.model.class_embed = nn.Linear(in_features, num_classes)
+        
         self.model.to(self.device)
 
-        # Optimizer
+        # Freeze all parameters
+        for param in self.model.parameters():
+            param.requires_grad = False
+        
+        # Enable training only for query_embed and class_embed
+        self.model.query_embed.requires_grad = True
+        self.model.class_embed.requires_grad = True
+
+        # Optimizer: only trainable parameters
         self.optimizer = optim.AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
             lr=self.learning_rate,
             weight_decay=self.weight_decay
         )
 
-        # Loss function
-        self.criterion = nn.CrossEntropyLoss()
+
+        # Loss function (classification only; BB loss added in train loop)
+        self.cls_loss_fn = nn.CrossEntropyLoss()
 
         # Training history
         self.history = {"train_loss": []}
@@ -46,7 +63,6 @@ class DETRTrainer:
             epoch_loss = 0.0
 
             for batch_idx, (imgs, targets) in enumerate(train_loader):
-                # imgs: list of tensors, targets: list of dicts
                 # Convert grayscale to 3 channels
                 imgs = [img.repeat(3, 1, 1).to(self.device) if img.shape[0]==1 else img.to(self.device)
                         for img in imgs]
@@ -55,16 +71,23 @@ class DETRTrainer:
                 self.optimizer.zero_grad()
                 outputs = self.model(imgs)
 
-                pred_logits = outputs['pred_logits']  # [B, num_queries, num_classes+1]
+                pred_logits = outputs['pred_logits']  # [B,1,num_classes]
+                pred_boxes  = outputs['pred_boxes']   # [B,1,4]
 
-                # Prepare target labels
-                batch_labels = torch.stack([t['labels'] for t in targets])
-                min_len = min(pred_logits.shape[1], batch_labels.shape[1])
-                pred_logits = pred_logits[:, :min_len, :]
-                batch_labels = batch_labels[:, :min_len]
+                # Prepare targets
+                target_labels = torch.stack([t['labels'].squeeze() for t in targets]).to(self.device)  # [B]
+                target_boxes  = torch.stack([t['boxes'].squeeze() for t in targets]).to(self.device)   # [B,4]
 
-                loss = self.criterion(pred_logits.reshape(-1, pred_logits.shape[-1]),
-                                      batch_labels.reshape(-1))
+                # Classification loss
+                cls_loss = self.cls_loss_fn(pred_logits.squeeze(1), target_labels)
+
+                # Bounding box L1 loss
+                bbox_loss = nn.functional.l1_loss(pred_boxes.squeeze(1), target_boxes)
+
+                # Total loss (adjust weight of bbox_loss if needed)
+                loss = cls_loss + 5.0 * bbox_loss
+
+                # Backprop
                 loss.backward()
                 self.optimizer.step()
 
@@ -100,13 +123,13 @@ class DETRTrainer:
             batch_size = len(imgs) if isinstance(imgs, list) else imgs.shape[0]
 
             for i in range(batch_size):
-                logits = outputs['pred_logits'][i]  # [num_queries, num_classes+1]
-                boxes = outputs['pred_boxes'][i]    # [num_queries, 4]
+                logits = outputs['pred_logits'][i]  # [num_queries=1, num_classes]
+                boxes  = outputs['pred_boxes'][i]   # [num_queries=1, 4]
 
                 scores, labels = logits.softmax(-1).max(-1)
                 mask = scores > conf_thresh
 
-                boxes_out = boxes[mask].cpu()
+                boxes_out  = boxes[mask].cpu()
                 labels_out = labels[mask].cpu()
                 scores_out = scores[mask].cpu()
 
