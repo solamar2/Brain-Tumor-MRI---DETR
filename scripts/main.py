@@ -2,7 +2,8 @@ from scripts.EDA import BrainTumorEDA
 from scripts.segmentation import BrainMaskSimple
 from scripts.preprocessing import BrainTumorDataset
 from scripts.dataloader import BrainTumorDataLoader
-from scripts.detection_model import DETRTrainer
+from scripts.detection_model_DETR import DETRTrainer
+from scripts.evaluation import BrainTumorEvaluator
 import torch
 import os
 import random
@@ -18,6 +19,12 @@ eda = BrainTumorEDA(main_train_path)
 eda.plot_class_counts_and_examples()
 eda.plot_bb_analysis()
 eda.plot_image_stats()
+
+# ------------------------------
+# Class to idx: (same to train and test)
+class_names = ['Glioma','Meningioma', 'No Tumor', 'Pituitary']
+class_to_idx = {cls: idx for idx, cls in enumerate(class_names)}
+num_classes = 4
 
 # ------------------------------
 ## 1. Segment brain vs background
@@ -40,12 +47,6 @@ for cls_name in os.listdir(main_train_path):
 
 
 # ------------------------------
-# Class to idx: (same to train and test)
-class_names = sorted([d for d in os.listdir(main_train_path) if os.path.isdir(os.path.join(main_train_path, d))])
-class_to_idx = {cls: idx for idx, cls in enumerate(class_names)}
-num_classes = len(class_names)
-
-# ------------------------------
 ## 2. Pre process the data
 train_dataset = BrainTumorDataset(main_train_path, class_to_idx, image_size=(256, 256), augment=True)
 for i in range (0,5):
@@ -58,27 +59,37 @@ train_loader = BrainTumorDataLoader(train_dataset, class_to_idx, batch_size=4, w
 # ------------------------------
 # 4. Train model
 device = "cuda" if torch.cuda.is_available() else "cpu"
-trainer = DETRTrainer(num_classes=num_classes, device=device, learning_rate=1e-4, weight_decay=1e-4, num_epochs=5)
+trainer = DETRTrainer(num_classes=num_classes, device=device, learning_rate=1e-4, weight_decay=1e-4, num_epochs=5, BB_weight=0.001)
 trainer.train(train_loader, print_every=1)
 
 # ------------------------------
 # 5. Test:
-
 segmenter = BrainMaskSimple(train_dir=main_test_path)
 segmenter.run()
-
-
 test_dataset  = BrainTumorDataset(main_test_path,  class_to_idx, image_size=(256, 256), augment=False)
 test_loader  = BrainTumorDataLoader(test_dataset,  class_to_idx, batch_size=4, weighted_sampling=False, shuffle=False).get_loader()
 
-all_results = []
-for imgs, targets in test_loader:
-    imgs_tensor = torch.stack(imgs).to(device)  # [B,C,H,W]
-    batch_results = trainer.predict(imgs_tensor, conf_thresh=0.5)
-    all_results.extend(batch_results)
+# ------------------------------
+# 6. Evaluation
+evaluator = BrainTumorEvaluator(model_trainer=trainer, dataset=test_dataset, class_names=class_names, iou_thresh=0.5)
 
-DETRTrainer.visualize_prediction(train_dataset, trainer, idx=5, dataset_type="Train")
-DETRTrainer.visualize_prediction(test_dataset, trainer, idx=2, dataset_type="Test")
+# Run evaluation on the entire test dataset
+metrics_per_class, all_iou_values, all_gt, all_pred = evaluator.evaluate_dataset(conf_thresh=0.5)
+
+# Print mAP@0.5 per class
+print("=== mAP@0.5 per class ===")
+for cls, m in metrics_per_class.items():
+    print(f"{cls}: AP@0.5 = {m['AP@0.5']:.3f}, n_GT={m['n_GT']}, n_pred={m['n_pred']}")
+
+# Plot IoU histograms for all classes
+evaluator.plot_iou_histograms(all_iou_values)
+
+# Plot Precision-Recall curves for each class
+evaluator.plot_precision_recall_curves(all_gt, all_pred)
+
+# Visualize a random sample with ground truth and predicted boxes
+evaluator.visualize_sample(idx=random.randint(0, len(test_dataset)-1), conf_thresh=0.5, show_gt=True, show_pred=True)
+
 
     
     
