@@ -5,7 +5,7 @@ import matplotlib.patches as patches
 import random
 
 class DETRTrainer:
-    def __init__(self, num_classes, device=None, learning_rate=1e-4, weight_decay=1e-4, num_epochs=10):
+    def __init__(self, num_classes, device=None, learning_rate=1e-4, weight_decay=1e-4, num_epochs=10, BB_weight=1.0):
         """
         DETR trainer for 2D grayscale MRI images.
         Automatically adapts 1-channel MRI to 3-channel input.
@@ -15,6 +15,7 @@ class DETRTrainer:
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.num_epochs = num_epochs
+        self.BB_weight=BB_weight
 
         # Load pretrained DETR
         self.model = torch.hub.load('facebookresearch/detr', 'detr_resnet50', pretrained=True)
@@ -39,6 +40,10 @@ class DETRTrainer:
             p.requires_grad = True
         for p in self.model.class_embed.parameters():
             p.requires_grad = True
+            
+        for name, param in self.model.backbone.named_parameters():
+            if "layer4" in name:
+                param.requires_grad = True
     
         # Optimizer: only trainable parameters
         self.optimizer = optim.AdamW(
@@ -86,8 +91,8 @@ class DETRTrainer:
                 # Bounding box L1 loss
                 bbox_loss = nn.functional.l1_loss(pred_boxes.squeeze(1), target_boxes)
 
-                # Total loss (adjust weight of bbox_loss if needed)
-                loss = cls_loss + 5.0 * bbox_loss
+                # Total loss 
+                loss = cls_loss + self.BB_weight * bbox_loss
 
                 # Backprop
                 loss.backward()
