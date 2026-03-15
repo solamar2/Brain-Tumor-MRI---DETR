@@ -35,9 +35,11 @@ class DETRTrainer:
             param.requires_grad = False
         
         # Enable training only for query_embed and class_embed
-        self.model.query_embed.requires_grad = True
-        self.model.class_embed.requires_grad = True
-
+        for p in self.model.query_embed.parameters():
+            p.requires_grad = True
+        for p in self.model.class_embed.parameters():
+            p.requires_grad = True
+    
         # Optimizer: only trainable parameters
         self.optimizer = optim.AdamW(
             filter(lambda p: p.requires_grad, self.model.parameters()),
